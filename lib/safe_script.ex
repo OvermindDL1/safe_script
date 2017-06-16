@@ -22,7 +22,7 @@ defmodule SafeScript do
   """
   def safe_eval_of_input(input, binding \\ [], opts \\ [], type \\ :Elixir) do
     with\
-      {:ok, ast} <- safe_ast_of_input(input, type),
+      {:ok, ast} <- safe_ast_of_input(input, opts, type),
       result <- safe_eval_of_safe_ast(ast, binding, opts),
       do: result
   end
@@ -47,9 +47,9 @@ defmodule SafeScript do
       # {:ok, 4, [a: 42]}
 
   """
-  def safe_compile_of_input(input, type \\ :Elixir) do
+  def safe_compile_of_input(input, opts \\ [], type \\ :Elixir) do
     with\
-      {:ok, ast} <- safe_ast_of_input(input, type),
+      {:ok, ast} <- safe_ast_of_input(input, opts, type),
       {:ok, result} <- safe_compile_of_safe_ast(ast),
       do: {:ok, result}
   end
@@ -120,6 +120,21 @@ defmodule SafeScript do
       iex> fun.(2)
       42
 
+      iex> {:error, unsupported_ast} = SafeScript.safe_compile_of_input_block("IO.inspect(42)")
+      iex> unsupported_ast
+      {:__aliases__, [counter: 0, line: 1], [:IO]}
+
+      iex> whitelist =
+      ...>   fn
+      ...>     ({:__aliases__, [counter: 0, line: 1], [:IO]}=ast, succ) -> {ast, succ} # Allow the module
+      ...>     ({{:., _, [{:__aliases__, aMeta, [:IO]}, :inspect]}, _, [_]}=ast, succ) -> if(aMeta[:alias], do: {ast, {false, ast}}, else: {ast, succ}) # But only allow certain calls on it
+      ...>     ({{:., _, [{:__aliases__, _, [:IO]}, _]}, _, [_]}=ast, _) -> {ast, {false, ast}} # And not the rest
+      ...>     (ast, v) -> SafeScript.default_safe(ast, v)
+      ...>   end
+      iex> {:ok, fun} = SafeScript.safe_compile_of_input_block("IO.inspect(42)", [], [], [is_allowed_fun: whitelist])
+      iex> fun.()
+      42
+
       # Infinite-loop!
       # iex> {:ok, fun} = SafeScript.safe_compile_of_input_block("a_fun = fn f -> f.(f) end; a_fun.(a_fun)")
       # iex> fun.()
@@ -129,7 +144,7 @@ defmodule SafeScript do
   def safe_compile_of_input_block(input, arg_names \\ [], binding \\ [], opts \\ [], type \\ :Elixir) do
     arguments = Enum.map(arg_names, &Macro.var(&1, nil))
     with\
-      {:ok, {:safe, safe_ast}} <- safe_ast_of_input(input, type),
+      {:ok, {:safe, safe_ast}} <- safe_ast_of_input(input, opts, type),
       ast = {:safe, {:fn, [], [{:->, [], [arguments, safe_ast]}]}},
       # {:ok, {:ok, fun, []}} when is_function(fun, 0) <- safe_eval_of_safe_ast(ast, binding, opts),
       {:ok, fun, _} when is_function(fun) <- safe_eval_of_safe_ast(ast, binding, opts),
@@ -149,12 +164,12 @@ defmodule SafeScript do
       {:ok, {:safe, {:+, [line: 1], [{:a, [line: 1], nil}, 2]}}}
 
   """
-  def safe_ast_of_input(input, type \\ :Elixir)
-  def safe_ast_of_input(input, :Elixir) when is_binary(input) do
+  def safe_ast_of_input(input, opts \\ [], type \\ :Elixir)
+  def safe_ast_of_input(input, opts, :Elixir) when is_binary(input) do
     case Code.string_to_quoted(input) do
       {:error, _reason} = err -> err
       {:ok, ast} ->
-        safe_ast_of_ast(ast)
+        safe_ast_of_ast(ast, opts[:is_allowed_fun] || &default_safe/2)
     end
   end
 
