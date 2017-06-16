@@ -176,6 +176,7 @@ defmodule SafeScript do
 
   def default_safe(ast, acc)
   def default_safe(ast, {false, _}=err), do: {ast, err}
+  def default_safe({_, _}=ast, succ), do: {ast, succ}
   def default_safe({:__block__, _, _}=ast, succ), do: {ast, succ}
   def default_safe({:__aliases__, _, _}=ast, _), do: {ast, {false, ast}}
   def default_safe({binding, _, nil}=ast, succ) when is_atom(binding), do: {ast, succ}
