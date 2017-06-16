@@ -180,6 +180,7 @@ defmodule SafeScript do
   def default_safe({binding, _, nil}=ast, succ) when is_atom(binding), do: {ast, succ}
   def default_safe({{_, _, _}, _, args}=ast, succ) when is_list(args), do: {ast, succ}
   def default_safe({op, _, _}=ast, succ) when op in [:+, :-, :/, :*, :=, :->, :., :fn], do: {ast, succ}
+  def default_safe({local_call, _, args}=ast, succ) when is_atom(local_call) and is_list(args), do: {ast, succ}
   def default_safe(ast, succ)
     when is_integer(ast)
     or is_float(ast)
