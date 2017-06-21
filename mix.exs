@@ -2,12 +2,15 @@ defmodule SafeScript.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :safe_script,
-     version: "0.1.0",
-     elixir: "~> 1.4",
-     build_embedded: Mix.env == :prod,
-     start_permanent: Mix.env == :prod,
-     deps: deps()]
+    [
+      app: :safe_script,
+      version: "0.1.0",
+      elixir: "~> 1.4",
+      build_embedded: Mix.env == :prod,
+      start_permanent: Mix.env == :prod,
+      deps: deps(),
+      dialyzer: [],
+    ]
   end
 
   # Configuration for the OTP application
@@ -28,6 +31,10 @@ defmodule SafeScript.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    []
+    [
+      {:ex_spirit, "~> 0.3.0"},
+      # {:ex_spirit, git: "https://github.com/OvermindDL1/ex_spirit.git"},
+      {:dialyxir, "~> 0.5.0", only: [:dev, :test], runtime: false},
+    ]
   end
 end
