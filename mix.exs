@@ -32,7 +32,7 @@ defmodule SafeScript.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [
-      {:ex_spirit, "~> 0.3.0"},
+      {:ex_spirit, "~> 0.3.3"},
       # {:ex_spirit, git: "https://github.com/OvermindDL1/ex_spirit.git"},
       {:dialyxir, "~> 0.5.0", only: [:dev, :test], runtime: false},
     ]
