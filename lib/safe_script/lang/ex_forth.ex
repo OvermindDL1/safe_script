@@ -75,7 +75,7 @@ defmodule SafeScript.Lang.ExForth do
         _ -> env
       end
     env = put_in(env.extra[:words], if(is_map(opts[:words]), do: opts[:words], else: built_in_words()))
-    env = put_in(env.extra[:empty_stack_value], opts[:empty_stack_value] || :no_value)
+    env = put_in(env.extra[:empty_stack_value], opts[:empty_stack_value] || nil)
     # env = put_in(env.extra[:always_uppercase_words], if(opts[:case_insensitive], do: true, else: false))
     env = interpret_tokens(env, commands)
     case env.stack do
@@ -258,6 +258,37 @@ defmodule SafeScript.Lang.ExForth do
   end
 
 
+  defp split_if_then_tokens(is_else \\ false, tokens)
+  defp split_if_then_tokens(is_else, [{:word, "IF", _}=token | tokens]) do
+    {sub_if_tokens, tokens} = skip_if_then_tokens(tokens)
+    {if_branch_tokens, else_branch_tokens, tokens} = split_if_then_tokens(is_else, tokens)
+    {[token | sub_if_tokens++if_branch_tokens], else_branch_tokens, tokens}
+  end
+  defp split_if_then_tokens(false, [{:word, "ELSE", _} | tokens]) do
+    {else_branch_tokens, [], tokens} = split_if_then_tokens(true, tokens)
+    {[], else_branch_tokens, tokens}
+  end
+  defp split_if_then_tokens(_is_else, [{:word, "THEN", _} | tokens]), do: {[], [], tokens}
+  defp split_if_then_tokens(_is_else, []), do: {[], [], []}
+  defp split_if_then_tokens(is_else, [token | tokens]) do
+    {if_branch_tokens, else_branch_tokens, tokens} = split_if_then_tokens(is_else, tokens)
+    if_branch_tokens = [token | if_branch_tokens]
+    {if_branch_tokens, else_branch_tokens, tokens}
+  end
+
+  defp skip_if_then_tokens(tokens)
+  defp skip_if_then_tokens([{:word, "THEN", _}=token | tokens]), do: {[token], tokens}
+  defp skip_if_then_tokens([{{:word, "IF", _}}=token | tokens]) do
+    {sub_if_tokens, tokens} = skip_if_then_tokens(tokens)
+    {if_tokens, tokens} = skip_if_then_tokens(tokens)
+    {[token | sub_if_tokens++if_tokens], tokens}
+  end
+  defp skip_if_then_tokens([token | tokens]) do
+    {if_tokens, tokens} = skip_if_then_tokens(tokens)
+    {[token | if_tokens], tokens}
+  end
+
+
   def built_in_words(), do: %{
 
     ## Comments
@@ -274,6 +305,20 @@ defmodule SafeScript.Lang.ExForth do
       word_tokens = decorate_words_with_tokens(word_tokens, env.extra.words)
       env = put_in(env.extra.words[name], word_tokens)
       {env, tokens}
+    end,
+
+    ## Flow control
+    "IF" => fn(env, _word, tokens) ->
+      {env, [condition]} = stack_pop(env, 1)
+      {if_branch_tokens, else_branch_tokens, tokens} = split_if_then_tokens(tokens)
+      # {if_tokens, [_then_token | tokens]} = Enum.split_while(tokens, fn {:word, "THEN", _} -> false; _ -> true end)
+      # {then_tokens, else_tokens} =
+      #   case Enum.split_while(if_tokens, fn {:word, "ELSE", _} -> false; _ -> true end) do
+      #     {then_tokens, [{:word, "ELSE", _} | else_tokens]} -> {then_tokens, else_tokens}
+      #     {then_tokens, []} -> {then_tokens, []}
+      #   end
+      next_tokens = if(condition, do: if_branch_tokens, else: else_branch_tokens)
+      {env, next_tokens++tokens}
     end,
 
     ## Quoting, Unquoting, and helpers
@@ -437,6 +482,98 @@ defmodule SafeScript.Lang.ExForth do
     #   end
     # end,
 
+    ## Maps
+    "%{}" => fn(env, _word, tokens) ->
+      env = stack_push(env, [%{}])
+      {env, tokens}
+    end,
+
+    "=>" => fn(env, word, tokens) ->
+      case stack_pop(env, 3) do
+        {env, [key, value, map]} when is_map(map) ->
+          map = Map.put(map, key, value)
+          env = stack_push(env, map)
+          {env, tokens}
+        {env, [key, value, map]} ->
+          env = push_invalid_arguments_msg(env, word, [key, value, map])
+          {env, tokens}
+      end
+    end,
+
+    "GET_KEY" => fn(env, word, tokens) ->
+      case stack_pop(env, 2) do
+        {env, [map, key]} when is_map(map) ->
+          env = stack_push(env, Map.get(map, key, env.extra.empty_stack_value))
+          {env, tokens}
+        {env, [map, key]} ->
+          env = push_invalid_arguments_msg(env, word, [key, map])
+          {env, tokens}
+      end
+    end,
+
+    ## Tuples
+    "{}" => fn(env, _word, tokens) ->
+      env = stack_push(env, [{}])
+      {env, tokens}
+    end,
+
+    "{}N" => fn(env, word, tokens) ->
+      case stack_pop(env, 1) do
+        {env, [arity]} when is_integer(arity) and arity >=0 ->
+          {env, lst} = stack_pop(env, arity)
+          tup = List.to_tuple(lst)
+          env = stack_push(env, tup)
+          {env, tokens}
+        {env, [arity]} ->
+          env = push_invalid_arguments_msg(env, word, [arity])
+          {env, tokens}
+      end
+    end,
+
+    "ELEM" => fn(env, word, tokens) ->
+      case stack_pop(env, 2) do
+        {env, [tup, idx]} when is_tuple(tup) and tuple_size(tup)>=idx ->
+          env = stack_push(env, elem(tup, idx))
+          {env, tokens}
+        {env, [tup, idx]} ->
+          env = push_invalid_arguments_msg(env, word, [tup, idx])
+          {env, tokens}
+      end
+    end,
+
+    "ELEMS->LIST" => fn(env, word, tokens) ->
+      case stack_pop(env, 1) do
+        {env, [tup]} when is_tuple(tup) ->
+          env = stack_push(env, [Tuple.to_list(tup)])
+          {env, tokens}
+        {env, [tup]} ->
+          env = push_invalid_arguments_msg(env, word, [tup])
+          {env, tokens}
+      end
+    end,
+
+    "LIST->ELEMS" => fn(env, word, tokens) ->
+      case stack_pop(env, 1) do
+        {env, [lst]} when is_list(lst) ->
+          env = stack_push(env, [List.to_tuple(lst)])
+          {env, tokens}
+        {env, [lst]} ->
+          env = push_invalid_arguments_msg(env, word, [lst])
+          {env, tokens}
+      end
+    end,
+
+    "#ELEMS" => fn(env, word, tokens) ->
+      case stack_pop(env, 1) do
+        {env, [tup]} when is_tuple(tup) ->
+          env = stack_push(env, tuple_size(tup))
+          {env, tokens}
+        {env, [tup]} ->
+          env = push_invalid_arguments_msg(env, word, [tup])
+          {env, tokens}
+      end
+    end,
+
     ## Call externals through the FFI directory
     "FFI" => fn(env, word, tokens) ->
       case stack_pop(env, 3) do
@@ -452,6 +589,174 @@ defmodule SafeScript.Lang.ExForth do
           env = push_invalid_arguments_msg(env, word, [arity, name, modules])
           {env, tokens}
       end
+    end,
+
+    ## Type tests
+    "IS_INTEGER" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_integer(term))
+      {env, tokens}
+    end,
+
+    "IS_FLOAT" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_float(term))
+      {env, tokens}
+    end,
+
+    "IS_ATOM" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_atom(term))
+      {env, tokens}
+    end,
+
+    "IS_BINARY" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_binary(term))
+      {env, tokens}
+    end,
+
+    "IS_BITSTRING" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_bitstring(term))
+      {env, tokens}
+    end,
+
+    "IS_BOOLEAN" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_boolean(term))
+      {env, tokens}
+    end,
+
+    "IS_FUNCTION" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_function(term))
+      {env, tokens}
+    end,
+
+    "IS_FUNCTION_N" => fn(env, _word, tokens) ->
+      {env, [term, arity]} = stack_pop(env, 1)
+      env = stack_push(env, is_function(term, arity))
+      {env, tokens}
+    end,
+
+    "IS_LIST" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_list(term))
+      {env, tokens}
+    end,
+
+    "IS_MAP" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_map(term))
+      {env, tokens}
+    end,
+
+    "IS_NUMBER" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_number(term))
+      {env, tokens}
+    end,
+
+    "IS_PID" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_pid(term))
+      {env, tokens}
+    end,
+
+    "IS_PORT" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_port(term))
+      {env, tokens}
+    end,
+
+    "IS_REFERENCE" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_reference(term))
+      {env, tokens}
+    end,
+
+    "IS_TUPLE" => fn(env, _word, tokens) ->
+      {env, [term]} = stack_pop(env, 1)
+      env = stack_push(env, is_tuple(term))
+      {env, tokens}
+    end,
+
+    ## Booleans
+    "TRUE" => fn(env, _word, tokens) ->
+      env = stack_push(env, true)
+      {env, tokens}
+    end,
+
+    "FALSE" => fn(env, _word, tokens) ->
+      env = stack_push(env, false)
+      {env, tokens}
+    end,
+
+    "==" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left == right)
+      {env, tokens}
+    end,
+
+    "!=" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left != right)
+      {env, tokens}
+    end,
+
+    "<" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left < right)
+      {env, tokens}
+    end,
+
+    ">" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left > right)
+      {env, tokens}
+    end,
+
+    "<=" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left <= right)
+      {env, tokens}
+    end,
+
+    ">=" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left >= right)
+      {env, tokens}
+    end,
+
+    "!" => fn(env, _word, tokens) ->
+      {env, [value]} = stack_pop(env, 1)
+      env = stack_push(env, !value)
+      {env, tokens}
+    end,
+
+    "AND" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left and right)
+      {env, tokens}
+    end,
+
+    "OR" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left or right)
+      {env, tokens}
+    end,
+
+    "&&" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left && right)
+      {env, tokens}
+    end,
+
+    "||" => fn(env, _word, tokens) ->
+      {env, [left, right]} = stack_pop(env, 2)
+      env = stack_push(env, left || right)
+      {env, tokens}
     end,
 
     ## Basic forth calls

@@ -247,26 +247,26 @@ defmodule SafeScriptTest.ExForth do
 
 
   test "Forth command - DUP" do
-    assert {:ok, {_env, [:no_value, :no_value]}} = SafeScript.eval_expressions("DUP", lang: lang())
+    assert {:ok, {_env, [nil, nil]}} = SafeScript.eval_expressions("DUP", lang: lang())
     assert {:ok, {_env, [2, 2]}} = SafeScript.eval_expressions("2 DUP", lang: lang())
   end
 
 
   test "Forth command - SWAP" do
-    assert {:ok, {_env, [:no_value, :no_value]}} = SafeScript.eval_expressions("SWAP", lang: lang())
+    assert {:ok, {_env, [nil, nil]}} = SafeScript.eval_expressions("SWAP", lang: lang())
     assert {:ok, {_env, [2, 1]}} = SafeScript.eval_expressions("2 1 SWAP", lang: lang())
     assert {:ok, {_env, [2, 1, 1, 2]}} = SafeScript.eval_expressions("2 1 2 1 SWAP", lang: lang())
   end
 
 
   test "Forth command - OVER" do
-    assert {:ok, {_env, [:no_value, :no_value, :no_value]}} = SafeScript.eval_expressions("OVER", lang: lang())
+    assert {:ok, {_env, [nil, nil, nil]}} = SafeScript.eval_expressions("OVER", lang: lang())
     assert {:ok, {_env, [1, 2, 1]}} = SafeScript.eval_expressions("1 2 OVER", lang: lang())
   end
 
 
   test "Forth command - ROT" do
-    assert {:ok, {_env, [:no_value, :no_value, :no_value]}} = SafeScript.eval_expressions("ROT", lang: lang())
+    assert {:ok, {_env, [nil, nil, nil]}} = SafeScript.eval_expressions("ROT", lang: lang())
     assert {:ok, {_env, [1, 3, 2]}} = SafeScript.eval_expressions("1 2 3 ROT ", lang: lang())
   end
 
@@ -275,6 +275,85 @@ defmodule SafeScriptTest.ExForth do
     assert {:ok, {_env, "( WORD `*+` IS NOT DEFINED )"}} = SafeScript.eval_expressions("SEE *+", lang: lang())
     assert {:ok, {_env, "( NATIVE WORD `SEE` )"}} = SafeScript.eval_expressions("SEE SEE", lang: lang())
     assert {:ok, {_env, "( a b c -- 'a ) * +"}} = SafeScript.eval_expressions(": *+   ( a b c   -- 'a    ) *    + ; SEE *+", lang: lang())
+  end
+
+
+  test "Forth command - <tests>" do
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("TRUE", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("FALSE", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("2 10 <", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("10 2 <", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("10 2 >", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("2 10 >", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("2 10 <=", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("10 2 <=", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("2 2 <=", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("10 2 >=", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("2 10 >=", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("2 2 >=", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("TRUE !", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("FALSE !", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("FALSE FALSE AND", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("FALSE TRUE AND", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("TRUE FALSE AND", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("TRUE TRUE AND", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("FALSE FALSE OR", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("FALSE TRUE OR", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("TRUE FALSE OR", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("TRUE TRUE OR", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("FALSE 42 &&", lang: lang())
+    assert {:ok, {_env, 21}} = SafeScript.eval_expressions("TRUE 21 &&", lang: lang())
+    assert {:ok, {_env, 21}} = SafeScript.eval_expressions("FALSE 21 ||", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("TRUE 21 ||", lang: lang())
+  end
+
+
+  test "Forth command - IF" do
+    # assert {:ok, {_env, [3, 1, 0]}} = SafeScript.eval_expressions("0 TRUE IF 1 THEN 3", lang: lang())
+    # assert {:ok, {_env, [3, 0]}} = SafeScript.eval_expressions("0 FALSE IF 1 THEN 3", lang: lang())
+    # assert {:ok, {_env, [3, 1, 0]}} = SafeScript.eval_expressions("0 TRUE IF 1 ELSE 2 THEN 3", lang: lang())
+    # assert {:ok, {_env, [3, 2, 0]}} = SafeScript.eval_expressions("0 FALSE IF 1 ELSE 2 THEN 3", lang: lang())
+    assert {:ok, {_env, 2}} = SafeScript.eval_expressions("TRUE IF FALSE IF 1 ELSE 2 THEN THEN", lang: lang())
+    assert {:ok, {_env, 1}} = SafeScript.eval_expressions("TRUE IF TRUE IF 1 ELSE 2 THEN THEN", lang: lang())
+    assert {:ok, {_env, []}} = SafeScript.eval_expressions("FALSE IF TRUE IF 1 ELSE 2 THEN THEN", lang: lang())
+    assert {:ok, {_env, 2}} = SafeScript.eval_expressions("TRUE IF FALSE IF 1 ELSE 2 THEN ELSE FALSE IF 3 ELSE 4 THEN THEN", lang: lang())
+    assert {:ok, {_env, 1}} = SafeScript.eval_expressions("TRUE IF TRUE IF 1 ELSE 2 THEN ELSE FALSE IF 3 ELSE 4 THEN THEN", lang: lang())
+    assert {:ok, {_env, 4}} = SafeScript.eval_expressions("FALSE IF TRUE IF 1 ELSE 2 THEN ELSE FALSE IF 3 ELSE 4 THEN THEN", lang: lang())
+    assert {:ok, {_env, 3}} = SafeScript.eval_expressions("FALSE IF TRUE IF 1 ELSE 2 THEN ELSE TRUE IF 3 ELSE 4 THEN THEN", lang: lang())
+  end
+
+
+  test "Type tests" do
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions(":test IS_ATOM", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_ATOM", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("\"test\" IS_BINARY", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_BINARY", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("\"test\" IS_BITSTRING", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_BITSTRING", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("TRUE IS_BOOLEAN", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_BOOLEAN", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("6.28 IS_FLOAT", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_FLOAT", lang: lang())
+    # assert {:ok, {_env, true}} = SafeScript.eval_expressions("IS_FUNCTION", lang: lang())
+    # assert {:ok, {_env, false}} = SafeScript.eval_expressions("IS_FUNCTION", lang: lang())
+    # assert {:ok, {_env, true}} = SafeScript.eval_expressions("IS_FUNCTION", lang: lang())
+    # assert {:ok, {_env, false}} = SafeScript.eval_expressions("IS_FUNCTION", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("21 IS_INTEGER", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions(":test IS_INTEGER", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("[] IS_LIST", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_LIST", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("%{} IS_MAP", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_MAP", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("21 IS_NUMBER", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions(":test IS_NUMBER", lang: lang())
+    # assert {:ok, {_env, true}} = SafeScript.eval_expressions("IS_PID", lang: lang())
+    # assert {:ok, {_env, false}} = SafeScript.eval_expressions("IS_PID", lang: lang())
+    # assert {:ok, {_env, true}} = SafeScript.eval_expressions("IS_PORT", lang: lang())
+    # assert {:ok, {_env, false}} = SafeScript.eval_expressions("IS_PORT", lang: lang())
+    # assert {:ok, {_env, true}} = SafeScript.eval_expressions("IS_REFERENCE", lang: lang())
+    # assert {:ok, {_env, false}} = SafeScript.eval_expressions("IS_REFERENCE", lang: lang())
+    assert {:ok, {_env, true}} = SafeScript.eval_expressions("{} IS_TUPLE", lang: lang())
+    assert {:ok, {_env, false}} = SafeScript.eval_expressions("21 IS_TUPLE", lang: lang())
   end
 
 
@@ -294,5 +373,25 @@ defmodule SafeScriptTest.ExForth do
     assert {:ok, {_env, []}} = SafeScript.eval_expressions("0 []N", lang: lang())
     assert {:ok, {_env, [0, 1]}} = SafeScript.eval_expressions("0 1 2 []N", lang: lang())
     # assert {:ok, {_env, [0, 1]}} = SafeScript.eval_expressions(": add1 1 + ; QUOTE + 0 1 2 []N MAP", lang: lang())
+  end
+
+
+  test "Map operations" do
+    assert {:ok, {_env, %{}}} = SafeScript.eval_expressions("%{}", lang: lang())
+    assert {:ok, {_env, %{key: :value}}} = SafeScript.eval_expressions(":key :value %{} =>", lang: lang())
+    assert {:ok, {_env, %{1 => 2, 3 => 4, 5 => 6, 7 => 8}}} = SafeScript.eval_expressions("1 2 3 4 %{} => => 5 6 ROT => 7 8 ROT =>", lang: lang())
+    assert {:ok, {_env, 4}} = SafeScript.eval_expressions("1 2 3 4 %{} => => 5 6 ROT => 3 GET_KEY", lang: lang())
+  end
+
+
+  test "Tuple operations" do
+    assert {:ok, {_env, {}}} = SafeScript.eval_expressions("{}", lang: lang())
+    assert {:ok, {_env, {}}} = SafeScript.eval_expressions("0 {}N", lang: lang())
+    assert {:ok, {_env, {0, 1}}} = SafeScript.eval_expressions("0 1 2 {}N", lang: lang())
+    assert {:ok, {_env, 0}} = SafeScript.eval_expressions("0 1 2 {}N 0 ELEM", lang: lang())
+    assert {:ok, {_env, 1}} = SafeScript.eval_expressions("0 1 2 {}N 1 ELEM", lang: lang())
+    assert {:ok, {_env, [0, 1]}} = SafeScript.eval_expressions("0 1 2 {}N ELEMS->LIST", lang: lang())
+    assert {:ok, {_env, {0, 1}}} = SafeScript.eval_expressions("0 1 2 []N LIST->ELEMS", lang: lang())
+    assert {:ok, {_env, 2}} = SafeScript.eval_expressions("0 1 2 {}N #ELEMS", lang: lang())
   end
 end
